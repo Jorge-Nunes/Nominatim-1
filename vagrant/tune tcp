@@ -1,0 +1,96 @@
+
+Linux Tunning : TIME_WAIT socket connections
+Posted on 22 de fevereiro de 2017 by fabio.reis	
+
+Neste post será apresentado como ajustar a performance para as conexões que ficam em “TIME_WAIT” no SO .
+
+O valor timeout_timewait determina o tempo que deve decorrer antes que o TCP/IP possa liberar uma conexão fechada e reutilizar seus recursos. Esse intervalo entre o fechamento e a liberação é conhecido como o estado TIME_WAIT ou o dobro do estado de duração máxima do segmento (2MSL). Durante esse tempo, a reabertura da conexão com o cliente e com o servidor custa menos que estabelecer uma nova conexão.
+
+Reduzindo o valor desta entrada, o TCP/IP pode liberar conexões fechadas mais rapidamente e fornecer mais recursos para novas conexões. Ajuste este parâmetro se o aplicativo em execução exigir liberação rápida, a criação de novas conexões ou um ajuste, devido a um baixo rendimento do processamento causado por várias conexões no estado TIME_WAIT.
+
+Representando o texto acima , segue abaixo o diagrama TCP :
+
+ 
+
+1) Configurações de SYSCTL
+
+Estarei apresentando uma breve explicação aqui de cada chave que será aplicada no meu arquivo de sysctl.conf, lembrando que a análise deverá ser feita com cuidado, sendo assim de total responsabilidade do técnico que está executando .
+
+ 
+
+net.ipv4.tcp_keepalive_time – O valor tcp_keepalive_time controla com que freqüência o TCP/IP tenta verificar se uma conexão inativa ainda está intacta. Se não houver nenhuma atividade por essa quantidade de tempo, uma transmissão de manutenção de funcionamento será enviada.
+
+Por padrão, o Linux envia uma mensagem de manutenção de funcionamento quando uma conexão está inativa por um período de 7.200 segundos (2 horas). Por padrão  1.800 segundos é o valor preferencial visto que metade das conexões fechadas é percebida em 30 minutos.
+
+ 
+
+net.ipv4.tcp_fin_timeout – Implementa o timeout do tcp_fin
+
+ 
+
+net.ipv4.tcp_tw_reuse – Implementa o reuso das conexões em time wait para novas conexões
+
+ 
+
+net.ipv4.tcp_tw_recycle – Implementa o recycle rápido das conexões em time wait, esta configuração pode causar problemas em clientes vindo via NAT , sendo assim podendo trazer problemas dependendo do cenário.
+
+ 
+
+2) Aplicando a configuração no /etc/sysctl.conf
+
+ 
+
+Verifique quantos TIME_WAITs estão aparecendo no momento
+1
+	netstat -nat | awk '{print $6}' | sort | uniq -c | sort -n
+
+Saída do comando
+1
+	user@server$ netstat -nta | awk '{print $6}' | sort | uniq -c | sort -n
+2
+	 1 Foreign
+3
+	 1 established)
+4
+	 25 LISTEN
+5
+	 44 ESTABLISHED
+6
+	 7459 TIME_WAIT
+
+Ajuste a configuração no arquivo /etc/sysctl.conf
+1
+	# Decrease TIME_WAIT seconds
+2
+	net.ipv4.tcp_fin_timeout = 30
+3
+	 
+4
+	# Recycle and Reuse TIME_WAIT sockets faster
+5
+	net.ipv4.tcp_tw_recycle = 1
+6
+	net.ipv4.tcp_tw_reuse = 1
+7
+	 
+8
+	# Keepalive Time
+9
+	net.ipv4.tcp_keepalive_time = 1800
+
+ 
+
+Execute o comando abaixo para aplicar as configurações no servidor .
+1
+	sysctl -p 
+
+ 
+
+Continue verificando com o comando netstat e observando se o ajuste de timeout irá melhorar o desempenho do servidor.
+
+Referências
+https://drupal.star.bnl.gov/STAR/blog-entry/jeromel/2009/feb/18/tcp-parameters-linux-kernel
+http://blog.corujadeti.com.br/alterar-o-nao-o-fin-wait-e-o-fin-wait-2-no-kernel-do-linux/
+http://www.fromdual.com/huge-amount-of-time-wait-connections
+http://publib.boulder.ibm.com/wasce/V1.1.0/pt_BR/Tasks/Tuning/Linux.html
+https://easyengine.io/tutorials/linux/sysctl-conf/
